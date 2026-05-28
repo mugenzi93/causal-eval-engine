@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<style>
+  body { font-family: "Segoe UI", sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 24px; color: #222; }
+  h1 { color: #2c3e50; border-bottom: 2px solid #4c72b0; padding-bottom: 8px; }
+  h2 { color: #4c72b0; margin-top: 36px; }
+  h3 { color: #555; }
+  .meta { color: #888; font-size: 0.9em; margin-bottom: 32px; }
+  .table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+  .table th, .table td { border: 1px solid #ddd; padding: 7px 12px; text-align: left; }
+  .table th { background: #4c72b0; color: white; }
+  .table tr:nth-child(even) { background: #f7f9fc; }
+  .figure-row { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
+  .figure-row img { max-width: 480px; border: 1px solid #ddd; border-radius: 4px; }
+  .result-card { background: #f7f9fc; border: 1px solid #d0d8e8; border-radius: 6px; padding: 16px 20px; margin: 12px 0; }
+  .result-card h3 { margin: 0 0 8px; text-transform: uppercase; font-size: 0.85em; letter-spacing: 1px; color: #4c72b0; }
+  .kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 12px; }
+  .kv dt { font-weight: 600; color: #555; }
+  .kv dd { margin: 0; }
+  .warning { color: #c0392b; font-weight: bold; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; background: #4c72b0; color: white; }
+  section { margin-bottom: 48px; }
+</style>
+</head>
+<body>
+
+<h1>{{ title }}</h1>
+<p class="meta">Generated: {{ generated_at }} &nbsp;|&nbsp;
+  Outcome: <strong>{{ config.outcome }}</strong> &nbsp;|&nbsp;
+  Treatment: <strong>{{ config.treatment }}</strong> &nbsp;|&nbsp;
+  Methods: {% for m in config.methods %}<span class="badge">{{ m }}</span> {% endfor %}
+</p>
+
+<!-- ── Causal DAG ── -->
+<section>
+  <h2>Causal DAG</h2>
+  {% if dag_b64 %}
+  <img src="data:image/png;base64,{{ dag_b64 }}" alt="Causal DAG" style="max-width:600px;">
+  {% endif %}
+  {% if adjustment_set %}
+  <p><strong>Minimal adjustment set:</strong> {{ adjustment_set | join(", ") }}</p>
+  {% endif %}
+</section>
+
+<!-- ── Table 1 ── -->
+<section>
+  <h2>Baseline Characteristics (Table 1)</h2>
+  {{ table_one_html | safe }}
+  <p style="font-size:0.85em;color:#888;">SMD = Standardized Mean Difference. |SMD| &lt; 0.1 indicates good balance.</p>
+</section>
+
+<!-- ── Love Plot ── -->
+<section>
+  <h2>Covariate Balance — Love Plot</h2>
+  {% if love_plot_b64 %}
+  <img src="data:image/png;base64,{{ love_plot_b64 }}" alt="Love Plot" style="max-width:640px;">
+  {% else %}
+  <p><em>Love plot not available.</em></p>
+  {% endif %}
+</section>
+
+<!-- ── Density Plots ── -->
+{% if density_plots_b64 %}
+<section>
+  <h2>Covariate Distributions</h2>
+  <div class="figure-row">
+    {% for img in density_plots_b64 %}
+    <img src="data:image/png;base64,{{ img }}" alt="Density plot">
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── ECDF Plots ── -->
+{% if ecdf_plots_b64 %}
+<section>
+  <h2>Empirical CDFs</h2>
+  <div class="figure-row">
+    {% for img in ecdf_plots_b64 %}
+    <img src="data:image/png;base64,{{ img }}" alt="ECDF plot">
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── Estimator Results ── -->
+<section>
+  <h2>Causal Effect Estimates</h2>
+  {% for res in estimator_results %}
+  <div class="result-card">
+    <h3>{{ res.method | upper }}</h3>
+    {% if res.get("error") %}
+    <p class="warning">⚠ {{ res.error }}</p>
+    {% else %}
+    <dl class="kv">
+      {% if res.get("ate") is not none %}
+      <dt>ATE</dt><dd>{{ res.ate }}</dd>
+      {% endif %}
+      {% if res.get("late") is not none %}
+      <dt>LATE (IV)</dt><dd>{{ res.late }}</dd>
+      {% endif %}
+      {% if res.get("ci_lower") is not none %}
+      <dt>95% CI</dt><dd>[{{ res.ci_lower }}, {{ res.ci_upper }}]</dd>
+      {% endif %}
+      {% if res.get("n_matched") is not none %}
+      <dt>N (matched)</dt><dd>{{ res.n_matched }}</dd>
+      {% endif %}
+      {% if res.get("n_obs") is not none %}
+      <dt>N (obs)</dt><dd>{{ res.n_obs }}</dd>
+      {% endif %}
+      {% if res.get("tau") is not none %}
+      <dt>τ (RDD)</dt><dd>{{ res.tau }}</dd>
+      {% endif %}
+      {% if res.get("bandwidth") is not none %}
+      <dt>Bandwidth</dt><dd>{{ res.bandwidth }}</dd>
+      {% endif %}
+      {% if res.get("first_stage_f") is not none %}
+      <dt>First-stage F</dt>
+      <dd>{{ res.first_stage_f }}
+        {% if res.get("weak_instrument_warning") %}<span class="warning"> ⚠ Weak instrument (F &lt; 10)</span>{% endif %}
+      </dd>
+      {% endif %}
+      {% if res.get("engine") is not none %}
+      <dt>Engine</dt><dd>{{ res.engine }}</dd>
+      {% endif %}
+      {% if res.get("n_entities") is not none %}
+      <dt>N (entities)</dt><dd>{{ res.n_entities }}</dd>
+      {% endif %}
+      {% if res.get("note") is not none %}
+      <dt>Note</dt><dd>{{ res.note }}</dd>
+      {% endif %}
+    </dl>
+    {% if res.get("rdd_plot") %}
+    <h3 style="margin-top:12px;">RDD Plot</h3>
+    <img src="data:image/png;base64,{{ res.rdd_plot | b64img }}" alt="RDD plot" style="max-width:600px;">
+    {% endif %}
+    {% if res.get("parallel_trends_plot") %}
+    <h3 style="margin-top:12px;">Parallel Trends</h3>
+    <img src="data:image/png;base64,{{ res.parallel_trends_plot | b64img }}" alt="Parallel trends" style="max-width:600px;">
+    {% endif %}
+    {% if res.get("method") == "did" and event_study_b64 %}
+    <h3 style="margin-top:12px;">Event Study</h3>
+    <img src="data:image/png;base64,{{ event_study_b64 }}" alt="Event study" style="max-width:600px;">
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<!-- ── Sensitivity Analysis ── -->
+{% if sensitivity_results %}
+<section>
+  <h2>Sensitivity Analysis (E-values)</h2>
+  {% for s in sensitivity_results %}
+  <div class="result-card">
+    <h3>{{ s.method | upper }}</h3>
+    {% if s.get("skipped") %}
+    <p><em>Skipped: {{ s.reason }}</em></p>
+    {% else %}
+    <dl class="kv">
+      <dt>E-value</dt><dd>{{ s.evalue }}</dd>
+      <dt>E-value (CI lower)</dt><dd>{{ s.evalue_ci_lower }}</dd>
+      <dt>t-statistic</dt><dd>{{ s.t_statistic }}</dd>
+    </dl>
+    <p style="font-size:0.9em;color:#555;">{{ s.interpretation }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+</body>
+</html>

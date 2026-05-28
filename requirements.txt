@@ -1,0 +1,15 @@
+pandas>=2.0
+numpy
+scipy
+scikit-learn
+dowhy
+causalml
+linearmodels
+networkx
+pyyaml
+rpy2
+tableone
+jinja2
+matplotlib
+seaborn
+pytest
