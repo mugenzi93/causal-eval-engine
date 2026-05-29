@@ -115,3 +115,143 @@ pytest tests/test_ingestion.py::test_balance_summary_shape
 - `run_eval.py` uses `sys.path.insert` to put `src/` on the path; tests do the same. There is no installed package.
 - All output paths in `src/` modules must be anchored to `Path(__file__).resolve().parent...` — never `Path("output/...")` relative to CWD, because modules are imported before `os.chdir` takes effect.
 - Data: `.parquet` and `.csv` supported; format detected by suffix in `ingestion.load_data`.
+
+
+## How to use this pipeline: step-by-step
+
+### Step 1 — Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+For R-backed estimators (RDD via `rdrobust`, optional upgraded DiD/FE via `fixest`), also run:
+
+```bash
+Rscript install.R
+```
+
+This is optional. Every method has a pure Python fallback, so you can skip this step if R is not available.
+
+---
+
+### Step 2 — Prepare your data
+
+Place your dataset in `data/raw/`. Accepted formats: `.csv` or `.parquet`.
+
+Your data must have:
+- One row per observation (cross-sectional) **or** one row per entity-period (panel)
+- A binary treatment column (0 = control, 1 = treated)
+- A numeric outcome column
+- One or more numeric covariate columns
+
+**For DiD and Fixed Effects specifically**, the data must be in long panel format with a subject ID column and a time period column. Example:
+
+| subject_id | year | treatment | age | outcome |
+|---|---|---|---|---|
+| 1 | 2018 | 0 | 34 | 30000 |
+| 1 | 2019 | 0 | 34 | 31500 |
+| 2 | 2018 | 1 | 28 | 35000 |
+
+**For IV**, you need an additional column that serves as the instrument (a variable that affects treatment assignment but has no direct effect on the outcome).
+
+**For RDD**, you need a running variable (a continuous score) and a known cutoff value above/below which treatment is assigned.
+
+---
+
+### Step 3 — Configure your study
+
+Edit `config/study.yaml` to match your data. At minimum, set:
+
+```yaml
+data:
+  path: data/raw/your_data.csv
+  id_col: your_subject_id_column     # required for Fixed Effects
+  time_col: your_time_column         # required for DiD and Fixed Effects
+
+outcome: your_outcome_column
+treatment: your_treatment_column
+covariates:
+  - covariate_1
+  - covariate_2
+  - covariate_3
+
+methods:
+  - psm          # include only the methods your data supports
+  - did
+  - iv
+  - rdd
+  - fixed_effects
+  - aipw
+
+sensitivity: true
+```
+
+**Method eligibility checklist:**
+
+| Method | What your data needs |
+|---|---|
+| `psm` | Binary treatment, numeric covariates |
+| `did` | Panel data (`id_col` + `time_col`), at least 2 time periods |
+| `iv` | An `instrument` column specified in the config |
+| `rdd` | A `running_variable` and `cutoff` specified in the config |
+| `fixed_effects` | Panel data (`id_col` + `time_col`), multiple entities and periods |
+| `aipw` | Binary treatment, numeric covariates (same as PSM) |
+
+Only list methods your data actually supports. The pipeline will return an error message (not crash) for any method with missing required fields, but it is cleaner to exclude them upfront.
+
+---
+
+### Step 4 — Run the pipeline
+
+From the project root:
+
+```bash
+python run_eval.py --config config/study.yaml
+```
+
+You will see progress printed for each of the 6 stages:
+
+```
+[1/6] Loading and validating data...
+[2/6] Running diagnostics (Table 1, love plot, density, ECDF)...
+[3/6] Building causal DAG...
+[4/6] Running estimators: ['psm', 'did', ...]
+[5/6] Running sensitivity analysis (E-values)...
+[6/6] Building HTML report...
+
+Done. Report saved to: output/report.html
+```
+
+---
+
+### Step 5 — Interpret the report
+
+Open `output/report.html` in any browser. It is fully self-contained (no internet required). Work through it in order:
+
+1. **Causal DAG** — verify the assumed causal structure looks right for your study. The adjustment set shown is what the pipeline used to control for confounding.
+
+2. **Table 1** — check baseline balance between treated and control groups. Standardized Mean Differences (SMD) above 0.1 in absolute value flag potential confounding; these covariates need adjustment.
+
+3. **Love plot** — shows SMDs before and after matching/weighting. After PSM, all SMDs should fall inside the dashed threshold line (|SMD| < 0.1). If they don't, the matching failed to achieve balance.
+
+4. **Density / overlap plots** — verify there is sufficient overlap in the propensity score distribution between treated and control. If the distributions don't overlap, the positivity assumption is violated and IPW-based estimates will be unreliable.
+
+5. **ECDF plots** — a second look at covariate overlap for individual variables.
+
+6. **Causal effect estimates** — review the ATE (or LATE for IV/RDD) from each method. If estimates are consistent across methods, that strengthens the causal interpretation. Large disagreements across methods suggest unmet assumptions in one or more of them.
+
+7. **Sensitivity analysis (E-values)** — for each estimate, the E-value is the minimum strength of association an unmeasured confounder would need (with both treatment and outcome) to fully explain away the result. A larger E-value means the result is more robust. An E-value close to 1.0 means a very weak confounder could explain it away entirely.
+
+---
+
+### Step 6 — Iterate
+
+Common iteration patterns:
+
+- **Add or remove covariates** — edit the `covariates` list in `study.yaml` and re-run. Watch how Table 1 SMDs and estimates change.
+- **Try a different method** — add or remove entries from `methods` in `study.yaml`.
+- **Swap datasets** — change `data.path`; everything else adapts automatically as long as column names match.
+- **Add a new estimator** — see the *Adding a new estimator* section under Architecture.
+
+All outputs are overwritten on each run, so there is no cleanup needed between iterations.
