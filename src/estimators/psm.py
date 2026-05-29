@@ -12,7 +12,9 @@ def _estimate_propensity(df: pd.DataFrame, treatment: str, covariates: list) -> 
     return model.predict_proba(X)[:, 1]
 
 
-def _match_1to1(df: pd.DataFrame, treatment: str, ps: np.ndarray) -> pd.DataFrame:
+def _match_1to1(
+    df: pd.DataFrame, treatment: str, ps: np.ndarray
+) -> tuple[pd.DataFrame, list, list]:
     treated_idx = df.index[df[treatment] == 1].tolist()
     control_idx = df.index[df[treatment] == 0].tolist()
 
@@ -25,7 +27,7 @@ def _match_1to1(df: pd.DataFrame, treatment: str, ps: np.ndarray) -> pd.DataFram
 
     matched_control = [control_idx[i[0]] for i in indices]
     matched_df = df.loc[treated_idx + matched_control].copy()
-    return matched_df
+    return matched_df, treated_idx, matched_control
 
 
 def run_psm(df: pd.DataFrame, config: dict) -> dict:
@@ -34,7 +36,7 @@ def run_psm(df: pd.DataFrame, config: dict) -> dict:
     covariates = config["covariates"]
 
     ps = _estimate_propensity(df, treatment, covariates)
-    matched_df = _match_1to1(df, treatment, ps)
+    matched_df, treated_idx, matched_control_idx = _match_1to1(df, treatment, ps)
 
     y_t = matched_df.loc[matched_df[treatment] == 1, outcome]
     y_c = matched_df.loc[matched_df[treatment] == 0, outcome]
@@ -45,6 +47,10 @@ def run_psm(df: pd.DataFrame, config: dict) -> dict:
     ci_lower = ate - 1.96 * se
     ci_upper = ate + 1.96 * se
 
+    # matched_weights: 1 for every unit that appears in the matched sample, 0 otherwise
+    matched_weights = pd.Series(0.0, index=df.index)
+    matched_weights.loc[treated_idx + matched_control_idx] = 1.0
+
     return {
         "method": "psm",
         "ate": round(float(ate), 4),
@@ -52,4 +58,5 @@ def run_psm(df: pd.DataFrame, config: dict) -> dict:
         "ci_upper": round(float(ci_upper), 4),
         "n_matched": int(n),
         "propensity_scores": pd.Series(ps, index=df.index),
+        "matched_weights": matched_weights,
     }

@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from ingestion import ingest
-from diagnostics import run_diagnostics
+from diagnostics import run_diagnostics, update_love_plot
 from dag import build_and_render
 from estimators import REGISTRY
 from sensitivity import run_sensitivity
@@ -24,7 +24,6 @@ def load_config(path: str) -> dict:
     config_path = Path(path).resolve()
     with open(config_path) as f:
         config = yaml.safe_load(f)
-    # Resolve relative data path against the project root (directory containing run_eval.py)
     project_root = Path(__file__).resolve().parent
     data_path = Path(config["data"]["path"])
     if not data_path.is_absolute():
@@ -38,12 +37,11 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    # Run from the project root so output/ is created there
     import os
     os.chdir(Path(__file__).resolve().parent)
+
     print(f"[1/6] Loading and validating data from: {config['data']['path']}")
     df, miss, _ = ingest(config)
-
     if not miss.empty:
         print(f"      Missingness detected:\n{miss.to_string()}")
 
@@ -69,14 +67,18 @@ def main():
         result = REGISTRY[method](df, config)
         estimator_results.append(result)
 
-        # Post-matching diagnostics for PSM
-        if method == "psm" and "propensity_scores" in result:
-            ps = result.pop("propensity_scores")
-            post_diag = run_diagnostics(
-                df, config["treatment"], config["covariates"],
-                propensity_scores=ps, label="post_psm"
-            )
-            diagnostics["love_plot"] = post_diag["love_plot"]
+        # After PSM: add matching weights to the love plot (5th series)
+        if method == "psm":
+            ps = result.pop("propensity_scores", None)
+            mw = result.pop("matched_weights", None)
+            if mw is not None:
+                print("      Updating love plot with matching weights...")
+                update_love_plot(
+                    diagnostics, df,
+                    config["treatment"], config["covariates"],
+                    matched_weights=mw,
+                    label="final",
+                )
 
     sensitivity_results = []
     if config.get("sensitivity", False):

@@ -47,7 +47,8 @@ pip install -r requirements.txt
 # Install R packages (optional — all methods have Python fallbacks)
 Rscript install.R
 
-# Run the full pipeline
+# Run the full pipeline (always use relative path — absolute paths with the
+# ASCII apostrophe will silently execute the ghost directory version)
 python run_eval.py --config config/study.yaml
 
 # Run tests
