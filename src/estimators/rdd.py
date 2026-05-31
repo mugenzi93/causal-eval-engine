@@ -28,30 +28,37 @@ def _ik_bandwidth(y: np.ndarray, x: np.ndarray, cutoff: float) -> float:
 # ── Local linear regression ────────────────────────────────────────────────
 
 def _local_linear(
-    y: np.ndarray, x: np.ndarray, cutoff: float, bandwidth: float
+    y: np.ndarray,
+    x: np.ndarray,
+    cutoff: float,
+    bandwidth: float,
+    covs: np.ndarray | None = None,
 ) -> tuple[float, float, float, float]:
-    """Fit local linear on each side; return (tau, se, intercept_left, intercept_right)."""
-    xc = x - cutoff
+    """Fit local linear on each side with optional covariate adjustment."""
+    xc     = x - cutoff
     mask_l = (xc >= -bandwidth) & (xc < 0)
     mask_r = (xc >= 0) & (xc <= bandwidth)
 
-    def _fit(xv, yv):
-        X = np.column_stack([np.ones(len(xv)), xv])
+    def _fit(xv, yv, cv=None):
+        base = np.column_stack([np.ones(len(xv)), xv])
+        X    = np.column_stack([base, cv]) if cv is not None else base
         beta, _, _, _ = np.linalg.lstsq(X, yv, rcond=None)
-        yhat = X @ beta
-        resid = yv - yhat
-        sigma2 = (resid ** 2).sum() / max(len(yv) - 2, 1)
-        cov = sigma2 * np.linalg.pinv(X.T @ X)
-        return beta[0], np.sqrt(cov[0, 0])
+        resid  = yv - X @ beta
+        sigma2 = (resid ** 2).sum() / max(len(yv) - X.shape[1], 1)
+        cov_m  = sigma2 * np.linalg.pinv(X.T @ X)
+        return beta[0], np.sqrt(cov_m[0, 0])   # intercept + its SE
 
     if mask_l.sum() < 3 or mask_r.sum() < 3:
         return np.nan, np.nan, np.nan, np.nan
 
-    intercept_l, se_l = _fit(xc[mask_l], y[mask_l])
-    intercept_r, se_r = _fit(xc[mask_r], y[mask_r])
+    cv_l = covs[mask_l] if covs is not None else None
+    cv_r = covs[mask_r] if covs is not None else None
+
+    intercept_l, se_l = _fit(xc[mask_l], y[mask_l], cv_l)
+    intercept_r, se_r = _fit(xc[mask_r], y[mask_r], cv_r)
 
     tau = intercept_r - intercept_l
-    se = np.sqrt(se_l ** 2 + se_r ** 2)
+    se  = np.sqrt(se_l ** 2 + se_r ** 2)
     return tau, se, intercept_l, intercept_r
 
 
@@ -97,14 +104,17 @@ def _rdd_plot(
 
 # ── rpy2 wrapper (optional) ────────────────────────────────────────────────
 
-def _run_rdrobust(y: np.ndarray, x: np.ndarray, cutoff: float) -> dict | None:
+def _run_rdrobust(y: np.ndarray, x: np.ndarray, cutoff: float, covs_r=None) -> dict | None:
     try:
         import rpy2.robjects as ro
         from rpy2.robjects import numpy2ri
         from rpy2.robjects.packages import importr
         numpy2ri.activate()
         rdrobust = importr("rdrobust")
-        result = rdrobust.rdrobust(y, x, c=cutoff)
+        if covs_r is not None:
+            result = rdrobust.rdrobust(y, x, c=cutoff, covs=covs_r)
+        else:
+            result = rdrobust.rdrobust(y, x, c=cutoff)
         coefs = np.array(result.rx2("coef"))
         ses = np.array(result.rx2("se"))
         ci = np.array(result.rx2("ci"))
@@ -135,43 +145,64 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
     if cutoff is None:
         return {"method": "rdd", "error": "cutoff not specified in config."}
 
+    covariates = config.get("covariates", [])
+    id_col     = config.get("data", {}).get("id_col")
+
     # RDD is cross-sectional — collapse panel data to one row per unit
-    # by averaging the outcome across time periods for each running-variable value
-    id_col = config.get('data', {}).get('id_col')
+    agg_cols = ([id_col] if id_col and id_col in df.columns else [])
+    all_cols = list({outcome, running_var} | set(covariates) & set(df.columns))
     if id_col and id_col in df.columns:
-        sub = df[[id_col, outcome, running_var]].dropna().groupby(id_col).mean().reset_index()
+        sub = df[[id_col] + all_cols].dropna().groupby(id_col).mean().reset_index()
     else:
-        sub = df[[outcome, running_var]].dropna().drop_duplicates(subset=[running_var])
-    y = sub[outcome].values.astype(float)
-    x = sub[running_var].values.astype(float)
+        sub = df[all_cols].dropna().drop_duplicates(subset=[running_var])
+
+    y      = sub[outcome].values.astype(float)
+    x      = sub[running_var].values.astype(float)
     cutoff = float(cutoff)
 
-    # Try R's rdrobust first
-    r_result = _run_rdrobust(y, x, cutoff)
+    # Covariate matrix for adjustment (None if no covariates available)
+    covs_in_data = [c for c in covariates if c in sub.columns]
+    covs_np = sub[covs_in_data].values.astype(float) if covs_in_data else None
+
+    # Try R's rdrobust first (passes covariates via covs= argument)
+    covs_r = None
+    if covs_np is not None:
+        try:
+            import rpy2.robjects as ro
+            from rpy2.robjects import numpy2ri
+            numpy2ri.activate()
+            covs_r = ro.r.matrix(
+                ro.FloatVector(covs_np.flatten()),
+                nrow=len(covs_np), ncol=covs_np.shape[1]
+            )
+        except Exception:
+            pass
+
+    r_result = _run_rdrobust(y, x, cutoff, covs_r=covs_r)
     if r_result:
-        tau = r_result["tau"]
-        bw = r_result["bandwidth"]
+        tau       = r_result["tau"]
+        bw        = r_result["bandwidth"]
         plot_path = _rdd_plot(y, x, cutoff, bw, tau)
         return {
-            "method": "rdd",
-            "tau": r_result["tau"],
-            "ci_lower": r_result["ci_lower"],
-            "ci_upper": r_result["ci_upper"],
-            "bandwidth": r_result["bandwidth"],
-            "n_obs": len(sub),
-            "engine": r_result["engine"],
-            "rdd_plot": str(plot_path),
+            "method":             "rdd",
+            "tau":                r_result["tau"],
+            "ci_lower":           r_result["ci_lower"],
+            "ci_upper":           r_result["ci_upper"],
+            "bandwidth":          r_result["bandwidth"],
+            "n_obs":              len(sub),
+            "engine":             r_result["engine"],
+            "covariate_adjusted": bool(covs_in_data),
+            "rdd_plot":           str(plot_path),
         }
 
-    # Python fallback: local linear with IK bandwidth
+    # Python fallback: covariate-adjusted local linear with IK bandwidth
     bw = _ik_bandwidth(y, x, cutoff)
-    tau, se, _, _ = _local_linear(y, x, cutoff, bw)
+    tau, se, _, _ = _local_linear(y, x, cutoff, bw, covs=covs_np)
 
-    # If IK bandwidth is too tight for the sample, widen progressively
     if np.isnan(tau):
         for factor in [2.0, 4.0, (x.max() - x.min()) / 2]:
             bw = _ik_bandwidth(y, x, cutoff) * factor
-            tau, se, _, _ = _local_linear(y, x, cutoff, bw)
+            tau, se, _, _ = _local_linear(y, x, cutoff, bw, covs=covs_np)
             if not np.isnan(tau):
                 break
 
@@ -183,12 +214,13 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
     plot_path = _rdd_plot(y, x, cutoff, bw, tau)
 
     return {
-        "method": "rdd",
-        "tau": round(float(tau), 4),
-        "ci_lower": round(float(ci_lower), 4),
-        "ci_upper": round(float(ci_upper), 4),
-        "bandwidth": round(float(bw), 4),
-        "n_obs": len(sub),
-        "engine": "local linear (Python fallback)",
-        "rdd_plot": str(plot_path),
+        "method":             "rdd",
+        "tau":                round(float(tau), 4),
+        "ci_lower":           round(float(ci_lower), 4),
+        "ci_upper":           round(float(ci_upper), 4),
+        "bandwidth":          round(float(bw), 4),
+        "n_obs":              len(sub),
+        "engine":             "local linear (Python fallback)",
+        "covariate_adjusted": bool(covs_in_data),
+        "rdd_plot":           str(plot_path),
     }

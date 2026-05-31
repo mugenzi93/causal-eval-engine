@@ -128,6 +128,9 @@
       {% if res.get("engine") is not none %}
       <dt>Engine</dt><dd>{{ res.engine }}</dd>
       {% endif %}
+      {% if res.get("covariate_adjusted") is not none %}
+      <dt>Covariate adjusted</dt><dd>{{ "Yes" if res.covariate_adjusted else "No" }}</dd>
+      {% endif %}
       {% if res.get("n_entities") is not none %}
       <dt>N (entities)</dt><dd>{{ res.n_entities }}</dd>
       {% endif %}
