@@ -13,10 +13,9 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 # Colour + marker palette — one entry per weighting scheme
 _SCHEME_STYLE = {
     "Unadjusted":      {"color": "#999999", "marker": "o", "zorder": 3},
-    "IPW (ATE)":       {"color": "#4c72b0", "marker": "D", "zorder": 4},
-    "IPW (ATT)":       {"color": "#e07b54", "marker": "s", "zorder": 5},
-    "Overlap weights": {"color": "#2ca02c", "marker": "^", "zorder": 6},
-    "Matching weights":{"color": "#9467bd", "marker": "P", "zorder": 7},
+    "IPW":             {"color": "#4c72b0", "marker": "D", "zorder": 4},
+    "Overlap weights": {"color": "#2ca02c", "marker": "^", "zorder": 5},
+    "Matching weights":{"color": "#9467bd", "marker": "P", "zorder": 6},
 }
 
 
@@ -73,13 +72,11 @@ def _weight_sets(df: pd.DataFrame, treatment: str, ps: pd.Series) -> dict:
     t = df[treatment].values
     e = ps.values
 
-    w_ipw_ate = pd.Series(np.where(t == 1, 1.0 / e, 1.0 / (1 - e)), index=df.index)
-    w_ipw_att = pd.Series(np.where(t == 1, 1.0,     e / (1 - e)),    index=df.index)
-    w_overlap  = pd.Series(np.where(t == 1, 1 - e,  e),               index=df.index)
+    w_ipw     = pd.Series(np.where(t == 1, 1.0 / e, 1.0 / (1 - e)), index=df.index)
+    w_overlap = pd.Series(np.where(t == 1, 1 - e,  e),               index=df.index)
 
     return {
-        "IPW (ATE)":       w_ipw_ate,
-        "IPW (ATT)":       w_ipw_att,
+        "IPW":             w_ipw,
         "Overlap weights": w_overlap,
     }
 
@@ -126,6 +123,79 @@ def table_one(
 
 
 # ── Love Plot ─────────────────────────────────────────────────────────────────
+
+# ── cobalt (R) love plot ──────────────────────────────────────────────────────
+
+def _try_cobalt_love_plot(
+    df: pd.DataFrame,
+    treatment: str,
+    covariates: list,
+    weight_sets: dict,          # {label: pd.Series} — does NOT include "Unadjusted"
+    save_path: Path,
+    threshold: float = 0.1,
+) -> Path | None:
+    """
+    Generate a love plot using R's cobalt package via rpy2.
+    Returns the save_path on success, None if cobalt/rpy2 is unavailable.
+
+    cobalt's bal.tab + love.plot handle the SMD computation internally
+    from the raw data and weights, producing ggplot2-quality output.
+    """
+    try:
+        import rpy2.robjects as ro
+        from rpy2.robjects import pandas2ri
+        from rpy2.robjects.packages import importr
+        from rpy2.robjects.conversion import localconverter
+        from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
+        import logging
+        rpy2_logger.setLevel(logging.ERROR)   # suppress R console noise
+
+        cobalt  = importr("cobalt")
+        ggplot2 = importr("ggplot2")
+
+        with localconverter(ro.default_converter + pandas2ri.converter):
+            r_cov   = ro.conversion.py2rpy(df[covariates].astype(float).reset_index(drop=True))
+            r_treat = ro.conversion.py2rpy(df[treatment].astype(int).reset_index(drop=True))
+            r_wts   = ro.ListVector({
+                lbl: ro.conversion.py2rpy(w.reset_index(drop=True).astype(float))
+                for lbl, w in weight_sets.items()
+            })
+
+        # Build balance table — passes all weight sets at once
+        bt = cobalt.bal_tab(
+            r_cov,
+            treat=r_treat,
+            weights=r_wts,
+            s_d_denom="pooled",
+            abs=True,
+        )
+
+        # Produce love plot
+        n_covs = len(covariates)
+        lp = cobalt.love_plot(
+            bt,
+            threshold=threshold,
+            abs=True,
+            var_order="unadj",
+            title="Covariate Balance Across Weighting Schemes",
+            colors=ro.StrVector(["#999999", "#4c72b0", "#e07b54", "#2ca02c", "#9467bd"]),
+        )
+
+        # Save via ggsave
+        height = max(4.0, n_covs * 0.45 + 2.0)
+        ggplot2.ggsave(
+            filename=str(save_path),
+            plot=lp,
+            width=8.0,
+            height=float(height),
+            dpi=150.0,
+        )
+
+        return save_path if save_path.exists() else None
+
+    except Exception:
+        return None
+
 
 def love_plot(
     smd_dict: dict,           # {scheme_label: pd.Series(covariate -> SMD)}
@@ -280,7 +350,13 @@ def run_diagnostics(
     if matched_weights is not None:
         smd_dict["Matching weights"] = _compute_smd_series(df, treatment, covariates, matched_weights)
 
-    love_path     = love_plot(smd_dict, save_path=FIGURES_DIR / f"love_plot_{label}.png")
+    _save = FIGURES_DIR / f"love_plot_{label}.png"
+    ws_for_cobalt = {k: v for k, v in {**_weight_sets(df, treatment, ps),
+                                        **({"Matching weights": matched_weights} if matched_weights is not None else {})}.items()}
+    love_path = (
+        _try_cobalt_love_plot(df, treatment, covariates, ws_for_cobalt, _save)
+        or love_plot(smd_dict, save_path=_save)
+    )
     t1            = table_one(df, treatment, covariates)
     density_paths = density_plots(df, treatment, covariates, ps, save_dir=FIGURES_DIR)
     ecdf_paths    = ecdf_plots(df, treatment, covariates, save_dir=FIGURES_DIR)
@@ -317,5 +393,10 @@ def update_love_plot(
         smd_dict[scheme_label] = _compute_smd_series(df, treatment, covariates, w)
     smd_dict["Matching weights"] = _compute_smd_series(df, treatment, covariates, matched_weights)
 
-    love_path = love_plot(smd_dict, save_path=FIGURES_DIR / f"love_plot_{label}.png")
+    _save = FIGURES_DIR / f"love_plot_{label}.png"
+    ws_for_cobalt = {**_weight_sets(df, treatment, ps), "Matching weights": matched_weights}
+    love_path = (
+        _try_cobalt_love_plot(df, treatment, covariates, ws_for_cobalt, _save)
+        or love_plot(smd_dict, save_path=_save)
+    )
     diagnostics["love_plot"] = str(love_path)

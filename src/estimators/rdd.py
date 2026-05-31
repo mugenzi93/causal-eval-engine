@@ -70,12 +70,16 @@ def _rdd_plot(
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.scatter(x[mask], y[mask], alpha=0.4, s=20, color="#888", label="Observations")
 
-    for side, color, sign in [("left", "#4c72b0", -1), ("right", "#e07b54", 1)]:
-        m = (xc >= sign * bandwidth * 0.0) & (xc * sign >= 0) & (np.abs(xc) <= bandwidth)
-        if m.sum() > 1:
+    for side, color, left_side in [("left", "#4c72b0", True), ("right", "#e07b54", False)]:
+        m = ((xc < 0) if left_side else (xc >= 0)) & (np.abs(xc) <= bandwidth)
+        if m.sum() < 3 or len(np.unique(x[m])) < 2:
+            continue
+        try:
             xs = np.linspace(x[m].min(), x[m].max(), 100)
             coef = np.polyfit(x[m] - cutoff, y[m], 1)
             ax.plot(xs, np.polyval(coef, xs - cutoff), color=color, linewidth=2)
+        except np.linalg.LinAlgError:
+            pass
 
     ax.axvline(cutoff, color="gray", linestyle="--", linewidth=1, label=f"Cutoff = {cutoff}")
     ax.set_xlabel("Running variable")
@@ -131,7 +135,13 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
     if cutoff is None:
         return {"method": "rdd", "error": "cutoff not specified in config."}
 
-    sub = df[[outcome, running_var]].dropna()
+    # RDD is cross-sectional — collapse panel data to one row per unit
+    # by averaging the outcome across time periods for each running-variable value
+    id_col = config.get('data', {}).get('id_col')
+    if id_col and id_col in df.columns:
+        sub = df[[id_col, outcome, running_var]].dropna().groupby(id_col).mean().reset_index()
+    else:
+        sub = df[[outcome, running_var]].dropna().drop_duplicates(subset=[running_var])
     y = sub[outcome].values.astype(float)
     x = sub[running_var].values.astype(float)
     cutoff = float(cutoff)

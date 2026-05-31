@@ -45,6 +45,7 @@ def main():
     if not miss.empty:
         print(f"      Missingness detected:\n{miss.to_string()}")
 
+    outcome_mean = float(df[config["outcome"]].mean())
     print("[2/6] Running diagnostics (Table 1, love plot, density, ECDF)...")
     diagnostics = run_diagnostics(
         df,
@@ -85,6 +86,7 @@ def main():
         print("[5/6] Running sensitivity analysis (E-values)...")
         sensitivity_results = run_sensitivity(estimator_results)
 
+    diagnostics["outcome_mean"] = outcome_mean
     print("[6/6] Building HTML report...")
     report_path = build_report(config, diagnostics, dag_info, estimator_results, sensitivity_results)
     print(f"\nDone. Report saved to: {report_path}")

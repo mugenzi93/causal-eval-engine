@@ -23,6 +23,7 @@
   .kv dd { margin: 0; }
   .warning { color: #c0392b; font-weight: bold; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; background: #4c72b0; color: white; }
+  .narrative { background: #eef3fb; border-left: 3px solid #4c72b0; padding: 10px 14px; margin: 12px 0 4px; border-radius: 0 4px 4px 0; font-size: 0.9em; line-height: 1.55; color: #333; }
   section { margin-bottom: 48px; }
 </style>
 </head>
@@ -134,6 +135,9 @@
       <dt>Note</dt><dd>{{ res.note }}</dd>
       {% endif %}
     </dl>
+    {% if res.get("narrative") %}
+    <p class="narrative">{{ res.narrative }}</p>
+    {% endif %}
     {% if res.get("rdd_plot") %}
     <h3 style="margin-top:12px;">RDD Plot</h3>
     <img src="data:image/png;base64,{{ res.rdd_plot | b64img }}" alt="RDD plot" style="max-width:600px;">
