@@ -1,0 +1,28 @@
+data:
+  path: data/raw/injury.csv
+  #id_col: subject_id
+  time_col: year          # required for did; omit for cross-sectional designs
+
+outcome: earnings
+treatment: program_participation
+covariates:
+  - age
+  - education
+  - prior_earnings
+
+# Optional: only needed when using IV
+instrument: distance_to_office
+
+# Optional: only needed when using RDD
+running_variable: score
+cutoff: 50
+
+methods:
+  - psm
+  - did
+  #- iv
+  #- rdd
+  #- fixed_effects
+  - aipw
+
+sensitivity: true
