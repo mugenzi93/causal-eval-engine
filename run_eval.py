@@ -69,14 +69,19 @@ def main():
         result = REGISTRY[method](df, config)
         estimator_results.append(result)
 
-        # Post-matching diagnostics for PSM
-        if method == "psm" and "propensity_scores" in result:
-            ps = result.pop("propensity_scores")
-            post_diag = run_diagnostics(
-                df, config["treatment"], config["covariates"],
-                propensity_scores=ps, label="post_psm"
-            )
-            diagnostics["love_plot"] = post_diag["love_plot"]
+        # Regenerate love plot with matching weights after PSM
+        if method == "psm":
+            result.pop("propensity_scores", None)
+            mw = result.pop("matched_weights", None)
+            if mw is not None:
+                post_diag = run_diagnostics(
+                    df,
+                    treatment=config["treatment"],
+                    covariates=config["covariates"],
+                    matching_weights=mw,
+                    label="post_psm",
+                )
+                diagnostics["love_plot"] = post_diag["love_plot"]
 
     sensitivity_results = []
     if config.get("sensitivity", False):
