@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 
 def _2sls(y: np.ndarray, d: np.ndarray, z: np.ndarray, X: np.ndarray) -> tuple:
@@ -52,6 +53,9 @@ def run_iv(df: pd.DataFrame, config: dict) -> dict:
     late, se, f_stat = _2sls(y, d, z, X)
     ci_lower = late - 1.96 * se
     ci_upper = late + 1.96 * se
+    dof = max(len(sub) - (len(covariates) + 2), 1)
+    t_stat = late / se if se > 0 else np.nan
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=dof)) if not np.isnan(t_stat) else np.nan
 
     weak_instrument = f_stat < 10
 
@@ -61,6 +65,7 @@ def run_iv(df: pd.DataFrame, config: dict) -> dict:
         "ci_lower": round(ci_lower, 4),
         "ci_upper": round(ci_upper, 4),
         "first_stage_f": round(f_stat, 2),
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "weak_instrument_warning": weak_instrument,
         "n_obs": len(sub),
     }

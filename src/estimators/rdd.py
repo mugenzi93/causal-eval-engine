@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats
 from pathlib import Path
 
 
@@ -107,11 +108,14 @@ def _run_rdrobust(y: np.ndarray, x: np.ndarray, cutoff: float) -> dict | None:
         bw = float(np.array(result.rx2("bws"))[0])
         tau = float(coefs[0])
         se = float(ses[2])  # robust SE
+        pv_arr = np.array(result.rx2("pv")).flatten()
+        p_value = float(pv_arr[2]) if len(pv_arr) > 2 else float(pv_arr[0])
         return {
             "tau": round(tau, 4),
             "se": round(se, 4),
             "ci_lower": round(float(ci[2, 0]), 4),
             "ci_upper": round(float(ci[2, 1]), 4),
+            "p_value": round(p_value, 4),
             "bandwidth": round(bw, 4),
             "engine": "rdrobust (R)",
         }
@@ -147,6 +151,7 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
             "tau": r_result["tau"],
             "ci_lower": r_result["ci_lower"],
             "ci_upper": r_result["ci_upper"],
+            "p_value": r_result.get("p_value"),
             "bandwidth": r_result["bandwidth"],
             "n_obs": len(sub),
             "engine": r_result["engine"],
@@ -170,6 +175,8 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
 
     ci_lower = tau - 1.96 * se
     ci_upper = tau + 1.96 * se
+    z_stat = tau / se if se > 0 else np.nan
+    p_value = float(2 * stats.norm.sf(abs(z_stat))) if not np.isnan(z_stat) else np.nan
     plot_path = _rdd_plot(y, x, cutoff, bw, tau)
 
     return {
@@ -177,6 +184,7 @@ def run_rdd(df: pd.DataFrame, config: dict) -> dict:
         "tau": round(float(tau), 4),
         "ci_lower": round(float(ci_lower), 4),
         "ci_upper": round(float(ci_upper), 4),
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "bandwidth": round(float(bw), 4),
         "n_obs": len(sub),
         "engine": "local linear (Python fallback)",

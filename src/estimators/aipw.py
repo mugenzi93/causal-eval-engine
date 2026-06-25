@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy import stats
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import cross_val_predict
 from sklearn.preprocessing import StandardScaler
@@ -9,7 +10,7 @@ from sklearn.pipeline import Pipeline
 def _fit_propensity(X: np.ndarray, T: np.ndarray) -> np.ndarray:
     model = Pipeline([
         ("scaler", StandardScaler()),
-        ("clf", LogisticRegression(max_iter=1000, C=1.0)),
+        ("clf", LogisticRegression(max_iter=2000, C=1.0, solver="saga")),
     ])
     # Cross-fitted propensity scores to avoid overfitting bias
     ps = cross_val_predict(model, X, T, cv=5, method="predict_proba")[:, 1]
@@ -54,7 +55,7 @@ def run_aipw(df: pd.DataFrame, config: dict) -> dict:
 
     sub = df[[outcome, treatment] + covariates].dropna()
     Y = sub[outcome].values.astype(float)
-    T = sub[treatment].values.astype(float)
+    T = sub[treatment].values.astype(int)
     X = sub[covariates].values.astype(float)
     n = len(sub)
 
@@ -72,6 +73,8 @@ def run_aipw(df: pd.DataFrame, config: dict) -> dict:
     se = influence.std() / np.sqrt(n)
     ci_lower = ate - 1.96 * se
     ci_upper = ate + 1.96 * se
+    z_stat = ate / se if se > 0 else np.nan
+    p_value = float(2 * stats.norm.sf(abs(z_stat))) if not np.isnan(z_stat) else np.nan
 
     return {
         "method": "aipw",
@@ -79,5 +82,6 @@ def run_aipw(df: pd.DataFrame, config: dict) -> dict:
         "ci_lower": round(float(ci_lower), 4),
         "ci_upper": round(float(ci_upper), 4),
         "n_obs": int(n),
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "note": "Doubly-robust AIPW with cross-fitted nuisance models (5-fold).",
     }

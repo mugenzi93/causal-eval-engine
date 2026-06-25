@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats
 from pathlib import Path
 
 
@@ -51,6 +52,9 @@ def run_did(df: pd.DataFrame, config: dict) -> dict:
     ate = float(dd)
     ci_lower = ate - 1.96 * se_dd if not np.isnan(se_dd) else np.nan
     ci_upper = ate + 1.96 * se_dd if not np.isnan(se_dd) else np.nan
+    dof = max(len(df2) - 4, 1)
+    t_stat = ate / se_dd if (not np.isnan(se_dd) and se_dd > 0) else np.nan
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=dof)) if not np.isnan(t_stat) else np.nan
 
     # Event study plot (if more than 2 periods)
     event_path = None
@@ -62,6 +66,7 @@ def run_did(df: pd.DataFrame, config: dict) -> dict:
         "ate": round(ate, 4),
         "ci_lower": round(float(ci_lower), 4) if not np.isnan(ci_lower) else None,
         "ci_upper": round(float(ci_upper), 4) if not np.isnan(ci_upper) else None,
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "n_obs": len(df2),
         "event_study_plot": str(event_path) if event_path else None,
     }

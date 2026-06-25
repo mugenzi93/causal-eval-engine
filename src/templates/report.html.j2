@@ -22,6 +22,8 @@
   .kv dt { font-weight: 600; color: #555; }
   .kv dd { margin: 0; }
   .warning { color: #c0392b; font-weight: bold; }
+  .sig { color: #27ae60; font-weight: bold; font-size: 0.95em; }
+  .pval { font-family: monospace; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; background: #4c72b0; color: white; }
   section { margin-bottom: 48px; }
 </style>
@@ -106,6 +108,15 @@
       {% if res.get("ci_lower") is not none %}
       <dt>95% CI</dt><dd>[{{ res.ci_lower }}, {{ res.ci_upper }}]</dd>
       {% endif %}
+      {% if res.get("p_value") is not none %}
+      <dt>P-value</dt>
+      <dd class="pval">{{ res.p_value }}
+        {% if res.p_value < 0.001 %}<span class="sig">***</span>
+        {% elif res.p_value < 0.01 %}<span class="sig">**</span>
+        {% elif res.p_value < 0.05 %}<span class="sig">*</span>
+        {% endif %}
+      </dd>
+      {% endif %}
       {% if res.get("n_matched") is not none %}
       <dt>N (matched)</dt><dd>{{ res.n_matched }}</dd>
       {% endif %}
@@ -149,6 +160,7 @@
     {% endif %}
   </div>
   {% endfor %}
+  <p style="font-size:0.82em;color:#888;margin-top:8px;">Significance: *** p&lt;0.001 &nbsp; ** p&lt;0.01 &nbsp; * p&lt;0.05</p>
 </section>
 
 <!-- ── Sensitivity Analysis ── -->

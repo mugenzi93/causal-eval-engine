@@ -1,13 +1,19 @@
 import numpy as np
 import pandas as pd
+from scipy import stats
 from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 
 
 def _estimate_propensity(df: pd.DataFrame, treatment: str, covariates: list) -> np.ndarray:
     X = df[covariates].fillna(df[covariates].median())
-    y = df[treatment]
-    model = LogisticRegression(max_iter=1000)
+    y = df[treatment].astype(int)
+    model = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(max_iter=2000, solver="saga")),
+    ])
     model.fit(X, y)
     return model.predict_proba(X)[:, 1]
 
@@ -44,12 +50,15 @@ def run_psm(df: pd.DataFrame, config: dict) -> dict:
     se = np.sqrt(y_t.var() / n + y_c.var() / n)
     ci_lower = ate - 1.96 * se
     ci_upper = ate + 1.96 * se
+    t_stat = ate / se if se > 0 else np.nan
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=2 * n - 2)) if not np.isnan(t_stat) else np.nan
 
     return {
         "method": "psm",
         "ate": round(float(ate), 4),
         "ci_lower": round(float(ci_lower), 4),
         "ci_upper": round(float(ci_upper), 4),
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "n_matched": int(n),
         "propensity_scores": pd.Series(ps, index=df.index),
     }

@@ -3,8 +3,8 @@ data:
   #id_col: subject_id
   time_col: afchnge          # required for did; omit for cross-sectional designs
 
-outcome: highearn
-treatment: ldurat
+outcome: ldurat
+treatment: highearn
 covariates:
   - male
   - married
@@ -24,6 +24,7 @@ covariates:
   - occdis
   - manuf
   - construc
+  - lage
 
 
 

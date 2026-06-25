@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats
 from pathlib import Path
 
 
@@ -82,11 +83,13 @@ def _run_linearmodels(df: pd.DataFrame, outcome: str, treatment: str, entity_col
         ate = float(res.params[treatment])
         se = float(res.std_errors[treatment])
         ci = res.conf_int().loc[treatment]
+        p_value = float(res.pvalues[treatment])
         return {
             "ate": round(ate, 4),
             "se": round(se, 4),
             "ci_lower": round(float(ci.iloc[0]), 4),
             "ci_upper": round(float(ci.iloc[1]), 4),
+            "p_value": round(p_value, 4),
             "engine": "linearmodels.PanelOLS",
         }
     except Exception:
@@ -113,6 +116,7 @@ def run_fixed_effects(df: pd.DataFrame, config: dict) -> dict:
             "ate": result["ate"],
             "ci_lower": result["ci_lower"],
             "ci_upper": result["ci_upper"],
+            "p_value": result.get("p_value"),
             "n_obs": len(df[[outcome, treatment, entity_col, time_col]].dropna()),
             "engine": result["engine"],
             "parallel_trends_plot": str(plot_path),
@@ -120,11 +124,14 @@ def run_fixed_effects(df: pd.DataFrame, config: dict) -> dict:
 
     # NumPy fallback
     ate, se, n_obs, n_entities = _twfe_numpy(df, outcome, treatment, entity_col, time_col)
+    t_stat = ate / se if se > 0 else np.nan
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=max(n_obs - n_entities - 1, 1))) if not np.isnan(t_stat) else np.nan
     return {
         "method": "fixed_effects",
         "ate": round(ate, 4),
         "ci_lower": round(ate - 1.96 * se, 4),
         "ci_upper": round(ate + 1.96 * se, 4),
+        "p_value": round(p_value, 4) if not np.isnan(p_value) else None,
         "n_obs": n_obs,
         "n_entities": n_entities,
         "engine": "within-transform (Python fallback)",
