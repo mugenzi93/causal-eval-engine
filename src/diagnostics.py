@@ -22,15 +22,19 @@ _SCHEME_STYLE = {
 
 # ── Propensity score fitting ────────────────────────────────────────────────
 
-def _fit_propensity(df: pd.DataFrame, treatment: str, covariates: list) -> np.ndarray:
-    X = df[covariates].fillna(df[covariates].median()).values
-    y = df[treatment].astype(int).values
+def _fit_propensity(df: pd.DataFrame, treatment: str, covariates: list) -> pd.Series:
+    """Fit PS model on complete cases only; returns a Series indexed by those rows."""
+    cols = [treatment] + covariates
+    complete = df[cols].dropna()
+    X = complete[covariates].values
+    y = complete[treatment].astype(int).values
     model = Pipeline([
         ("scaler", StandardScaler()),
         ("clf", LogisticRegression(max_iter=2000, solver="saga")),
     ])
     model.fit(X, y)
-    return model.predict_proba(X)[:, 1]
+    ps = model.predict_proba(X)[:, 1]
+    return pd.Series(ps, index=complete.index)
 
 
 # ── Weighted SMD computation ────────────────────────────────────────────────
@@ -280,29 +284,34 @@ def run_diagnostics(
     # Table 1 uses raw (unadjusted) data
     t1 = table_one(df, treatment, covariates)
 
-    # Fit propensity scores if not provided
+    # Fit PS on complete cases only; restrict all balance checks to those rows
     try:
-        ps = propensity_scores.values if propensity_scores is not None else _fit_propensity(df, treatment, covariates)
-        ps_series = pd.Series(ps, index=df.index)
+        if propensity_scores is not None:
+            ps_series = propensity_scores
+        else:
+            ps_series = _fit_propensity(df, treatment, covariates)
+        complete_df = df.loc[ps_series.index]
     except Exception:
         ps_series = None
+        complete_df = df
 
-    # Build SMD dict in display order
+    # Build SMD dict in display order (all on complete-case subset)
     smd_dict = {}
-    smd_dict["Unadjusted"] = _compute_smd(df, treatment, covariates)
+    smd_dict["Unadjusted"] = _compute_smd(complete_df, treatment, covariates)
 
     if ps_series is not None:
-        ipw_w  = _ipw_weights(df, treatment, ps_series.values)
-        olap_w = _overlap_weights(df, treatment, ps_series.values)
-        smd_dict["IPW"]             = _compute_smd(df, treatment, covariates, weights=ipw_w)
-        smd_dict["Overlap weights"] = _compute_smd(df, treatment, covariates, weights=olap_w)
+        ipw_w  = _ipw_weights(complete_df, treatment, ps_series.values)
+        olap_w = _overlap_weights(complete_df, treatment, ps_series.values)
+        smd_dict["IPW"]             = _compute_smd(complete_df, treatment, covariates, weights=ipw_w)
+        smd_dict["Overlap weights"] = _compute_smd(complete_df, treatment, covariates, weights=olap_w)
 
     if matching_weights is not None:
-        smd_dict["Matching weights"] = _compute_smd(df, treatment, covariates, weights=matching_weights)
+        mw_complete = matching_weights.reindex(complete_df.index).fillna(0)
+        smd_dict["Matching weights"] = _compute_smd(complete_df, treatment, covariates, weights=mw_complete)
 
     love_path = love_plot(smd_dict, save_path=FIGURES_DIR / f"love_plot_{label}.png")
-    density_paths = density_plots(df, treatment, covariates, ps_series, save_dir=FIGURES_DIR)
-    ecdf_paths    = ecdf_plots(df, treatment, covariates, save_dir=FIGURES_DIR)
+    density_paths = density_plots(complete_df, treatment, covariates, ps_series, save_dir=FIGURES_DIR)
+    ecdf_paths    = ecdf_plots(complete_df, treatment, covariates, save_dir=FIGURES_DIR)
 
     return {
         "table_one":     t1,
