@@ -1,21 +1,31 @@
 data:
   path: data/raw/injury.csv
   #id_col: subject_id
-  time_col: year          # required for did; omit for cross-sectional designs
+  time_col: afchnge          # required for did; omit for cross-sectional designs
 
-outcome: earnings
-treatment: program_participation
+outcome: highearn
+treatment: ldurat
 covariates:
+  - male
+  - married
+  - hosp
+  - indust
+  - injtype
   - age
-  - education
-  - prior_earnings
+  - prewage
+  - totmed
+  - benefit
+  - head
+  - neck
+  - upextr
+  - trunk
+  - lowback
+  - lowextr
+  - occdis
+  - manuf
+  - construc
 
-# Optional: only needed when using IV
-instrument: distance_to_office
 
-# Optional: only needed when using RDD
-running_variable: score
-cutoff: 50
 
 methods:
   - psm
