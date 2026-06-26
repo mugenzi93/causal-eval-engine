@@ -85,6 +85,9 @@ methods:
 sensitivity: true
 ```
 
+> **Example study (`config/study_one.yaml`):** The injury dataset (`data/raw/injury.csv`) is drawn from a workers’ compensation study examining the effect of higher earnings (`highearn`) on injury duration (`ldurat`). The DiD methodology used for this dataset is explained in detail at:
+> [https://evalsp21.classes.andrewheiss.com/example/diff-in-diff/](https://evalsp21.classes.andrewheiss.com/example/diff-in-diff/)
+
 **Method eligibility checklist:**
 
 | Method | What your data needs |
@@ -219,6 +222,10 @@ DiD is appropriate for policy evaluations, natural experiments, and any setting 
 
 **What the output means**
 DiD estimates the **Average Treatment Effect on the Treated (ATT)**. The `ate` field is the difference-in-differences estimate. The event-study plot (when >2 time periods are present) shows dynamic treatment effects over time.
+
+**Further reading**
+The DiD example used in `config/study_one.yaml` (workers’ compensation injury data) is fully explained at:
+[https://evalsp21.classes.andrewheiss.com/example/diff-in-diff/](https://evalsp21.classes.andrewheiss.com/example/diff-in-diff/)
 
 ---
 
