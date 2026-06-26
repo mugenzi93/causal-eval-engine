@@ -31,6 +31,7 @@ covariates:
 methods:
   - psm
   - did
+  - drdid
   #- iv
   #- rdd
   #- fixed_effects

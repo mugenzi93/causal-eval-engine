@@ -98,6 +98,7 @@ sensitivity: true
 | `rdd` | A `running_variable` and `cutoff` specified in the config |
 | `fixed_effects` | Panel data (`id_col` + `time_col`), multiple entities and periods |
 | `aipw` | Binary treatment, numeric covariates |
+| `drdid` | Panel data (`id_col` + `time_col`), at least 2 time periods, numeric covariates |
 
 Only list methods your data supports. The pipeline returns a descriptive error (without crashing) for any method with missing required fields, but it is cleaner to exclude them upfront.
 
@@ -336,6 +337,38 @@ AIPW estimates the **Average Treatment Effect (ATE)** — the effect of treatmen
 
 ---
 
+### Method 7: Doubly-Robust Difference-in-Differences (DR-DiD)
+
+**What it does**
+Extends plain DiD by combining two adjustments: a propensity score model (probability of treatment given covariates) and an outcome regression model for the control group. The estimator uses the efficient influence function from Sant'Anna & Zhao (2020), which is doubly robust — consistent if **either** the propensity model **or** the outcome model is correctly specified. DR-DiD produces better estimates than plain DiD when treated and control units differ meaningfully on observed covariates at baseline, because it adjusts for those differences rather than relying solely on the parallel-trends assumption.
+
+**When to use it over plain DiD**
+Use DR-DiD instead of `did` when:
+- Baseline covariate imbalance between treated and control groups is substantial (SMD > 0.1 on key covariates)
+- You want robustness against model misspecification — DR-DiD is consistent even if one of the two adjustment models is wrong
+- Your sample is large enough for the asymptotic normal approximation to be reliable
+- You want semiparametric efficiency gains over plain DiD
+
+If treated and control groups are well-balanced at baseline and you trust the parallel-trends assumption, plain `did` and `drdid` should give similar results. Consistent estimates across both methods strengthen credibility.
+
+**Key assumptions**
+
+| Assumption | What it means | How to check |
+|---|---|---|
+| Conditional parallel trends | After adjusting for covariates, the treated group's outcome would have changed by the same amount as the control group in the absence of treatment | Inspect the event-study plot from `did` as a proxy; covariate adjustment makes this more plausible than unconditional parallel trends |
+| No anticipation | Units do not change behavior before the treatment officially starts | Check for pre-treatment trends in the event study |
+| Overlap (positivity) | Every unit has a non-zero probability of being in the treated or control group given covariates | Propensity scores are clipped to [0.01, 0.99] automatically; check overlap plots |
+| Correct specification of at least one model | Either the propensity model or the outcome regression model (or both) is correctly specified | Double robustness means you get one "free" misspecification; use flexible model classes for both |
+| SUTVA | No spillover between units | Assess by study design |
+
+**What the output means**
+DR-DiD estimates the **Average Treatment Effect on the Treated (ATT)** — the effect of treatment for those who actually received it, at the post-treatment time period. The `ate` field is this quantity. Standard errors are computed from the empirical variance of the efficient influence function (analytic, not bootstrap), and inference uses a normal approximation. The `engine` field shows whether Python (default) or R was used.
+
+**Reference**
+Sant'Anna, P. H. C. & Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*, 219(1), 101–122.
+
+---
+
 ## Part 3 — Choosing the Right Method
 
 The table below summarizes which method is appropriate given your study's data structure and identification strategy:
@@ -343,7 +376,8 @@ The table below summarizes which method is appropriate given your study's data s
 | Your situation | Recommended method(s) |
 |---|---|
 | Cross-sectional data, all confounders measured | PSM, AIPW |
-| Panel data, treatment varies over time | DiD, Fixed Effects |
+| Panel data, treatment varies over time | DiD, DR-DiD, Fixed Effects |
+| Panel data with baseline imbalance between groups | DR-DiD over plain DiD |
 | Unmeasured confounders, valid instrument available | IV |
 | Treatment assigned by a score threshold | RDD |
 | Want to compare methods for robustness | Run all applicable methods and check consistency |

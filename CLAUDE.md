@@ -124,7 +124,7 @@ pytest tests/
 | `instrument` | IV only | Instrument variable name |
 | `running_variable` | RDD only | Running variable name |
 | `cutoff` | RDD only | Threshold value |
-| `methods` | yes | Any subset of: `psm`, `did`, `iv`, `rdd`, `fixed_effects`, `aipw` |
+| `methods` | yes | Any subset of: `psm`, `did`, `drdid`, `iv`, `rdd`, `fixed_effects`, `aipw` |
 | `sensitivity` | no | Set `true` to compute E-values |
 
 **`src/` modules:**
@@ -199,6 +199,7 @@ All estimators return a `p_value` field (two-sided) in addition to the estimate 
 | `rdd.py` | RDD | Extracted from `rdrobust`; normal approx for Python fallback |
 | `fixed_effects.py` | Two-Way FE | Extracted from `linearmodels`; t-test for numpy fallback |
 | `aipw.py` | AIPW | Two-sided z-test (normal approx — large sample) |
+| `drdid.py` | DR-DiD | Two-sided z-test (normal approx — large sample) |
 
 The report shows significance stars: `***` p < 0.001, `**` p < 0.01, `*` p < 0.05.
 
@@ -210,11 +211,12 @@ The report shows significance stars: `***` p < 0.001, `**` p < 0.01, `*` p < 0.0
 - **RDD**: Tries R `rdrobust` via `rpy2` first; falls back to local linear with IK bandwidth. Deduplicates panel data per subject before running. Covariates passed to both estimators
 - **Fixed Effects**: Tries `linearmodels.PanelOLS` with entity + time effects and clustered SEs; falls back to manual within-transformation. Covariates within-demeaned. Requires `id_col` and `time_col`
 - **AIPW**: 5-fold cross-fitted propensity (LogisticRegression + StandardScaler) and outcome (Ridge + StandardScaler) models; propensity clipped to [0.01, 0.99]
+- **DR-DiD**: Doubly-robust DiD (Sant'Anna & Zhao 2020). Fits a logistic PS model and two Ridge outcome models (control group, pre- and post-period). Efficient influence function combines IPW-DiD and outcome regression DiD. Consistent if either model is correctly specified. Works for panel and repeated cross-section designs. Use instead of `did` when there is meaningful baseline imbalance between treatment and control groups
 
 **Adding a new estimator:**
 1. Create `src/estimators/<name>.py` with `run_<name>(df: pd.DataFrame, config: dict) -> dict`
 2. Result dict must include `"method"`. Include `"ate"` (or `"late"`) + `"ci_lower"` / `"ci_upper"` for sensitivity analysis and `"p_value"` for report display
-3. Register in `src/estimators/__init__.py` `REGISTRY`
+3. Register in `src/estimators/__init__.py` `REGISTRY` (current keys: `psm`, `did`, `drdid`, `iv`, `rdd`, `fixed_effects`, `aipw`)
 4. Add to the `methods` list in the relevant config YAML
 
 ---

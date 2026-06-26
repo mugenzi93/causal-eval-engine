@@ -86,6 +86,7 @@ cutoff: 50                       # required for RDD
 methods:
   - psm
   - did
+  - drdid
   - iv
   - rdd
   - fixed_effects
@@ -106,6 +107,7 @@ sensitivity: true
 | Regression Discontinuity | `rdd` | Local linear with IK bandwidth; uses R `rdrobust` if available |
 | Two-Way Fixed Effects | `fixed_effects` | Entity + time FE, cluster-robust SEs; uses `linearmodels` if available |
 | Doubly-Robust AIPW | `aipw` | Cross-fitted (5-fold) propensity + outcome models; semiparametrically efficient |
+| Doubly-Robust DiD | `drdid` | Combines PS weighting with outcome regression in DiD framework; use over `did` when baseline imbalance is large |
 
 ---
 
@@ -118,7 +120,7 @@ The generated `output/report.html` is a single self-contained file with all figu
 - **Love plot** — covariate SMDs before and after adjustment
 - **Density / overlap plots** — propensity score and covariate distributions
 - **ECDF plots** — empirical CDFs for each covariate
-- **Causal effect estimates** — ATE/LATE with 95% CIs for each selected method
+- **Causal effect estimates** — ATE/LATE with 95% CIs and p-values for each selected method
 - **Sensitivity analysis** — E-values for unmeasured confounding per estimator
 
 ---
