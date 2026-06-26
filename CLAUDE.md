@@ -206,7 +206,7 @@ The report shows significance stars: `***` p < 0.001, `**` p < 0.01, `*` p < 0.0
 **Method-specific notes:**
 
 - **PSM**: PS estimated on complete cases; 1:1 nearest-neighbour matching via `ball_tree`. Returns `propensity_scores` and `matched_weights` (consumed by `run_eval.py`, popped before report)
-- **DiD**: Two-period DiD using first vs. last time point; covariates demeaned and added to OLS; interaction coefficient at index 3 is always the ATT. Event-study plot generated when >2 periods exist
+- **DiD**: Raw (unadjusted) two-period DiD — no covariate adjustment, no PS weighting. Uses first vs. last time point; OLS interaction coefficient at index 3 is the ATT. Relies on unconditional parallel trends. For covariate-adjusted DiD, use `drdid`. Event-study plot generated when >2 periods exist
 - **IV**: Manual 2SLS via `lstsq`. First-stage F-stat reported; `weak_instrument_warning: true` when F < 10
 - **RDD**: Tries R `rdrobust` via `rpy2` first; falls back to local linear with IK bandwidth. Deduplicates panel data per subject before running. Covariates passed to both estimators
 - **Fixed Effects**: Tries `linearmodels.PanelOLS` with entity + time effects and clustered SEs; falls back to manual within-transformation. Covariates within-demeaned. Requires `id_col` and `time_col`

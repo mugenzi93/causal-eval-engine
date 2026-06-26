@@ -204,6 +204,8 @@ PSM estimates the **Average Treatment Effect on the Treated (ATT)** — the effe
 **What it does**
 Compares the change in outcomes over time for the treated group to the change over time for a control group. The key insight is that common time trends cancel out, isolating the treatment effect from any pre-existing level differences between groups.
 
+> **Implementation note:** The `did` estimator computes a raw two-period DiD — no covariate adjustment and no propensity-score weighting. It identifies the ATT under the **unconditional** parallel trends assumption. If treated and control units differ substantially on observed covariates at baseline, those differences are not removed by plain DiD; use **DR-DiD** (`drdid`) instead, which adjusts for baseline imbalance via IPW and outcome regression.
+
 **When to use it**
 Use DiD when:
 - You have panel data (multiple observations per unit over time)

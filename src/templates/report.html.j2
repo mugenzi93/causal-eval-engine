@@ -25,6 +25,9 @@
   .sig { color: #27ae60; font-weight: bold; font-size: 0.95em; }
   .pval { font-family: monospace; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; background: #4c72b0; color: white; }
+  .callout { font-size: 0.85em; padding: 6px 12px; border-radius: 4px; margin: 6px 0 10px; }
+  .callout-warn { background: #fff8e1; border-left: 3px solid #f0b429; color: #7a5c00; }
+  .callout-info { background: #e8f4fd; border-left: 3px solid #4c72b0; color: #1a3a5c; }
   section { margin-bottom: 48px; }
 </style>
 </head>
@@ -95,6 +98,11 @@
   {% for res in estimator_results %}
   <div class="result-card">
     <h3>{{ res.method | upper }}</h3>
+    {% if res.method == "did" %}
+    <div class="callout callout-warn">Unadjusted — raw two-period DiD with no covariate adjustment and no PS weighting. Relies on unconditional parallel trends. If baseline imbalance is large, compare with <strong>DR-DiD</strong>.</div>
+    {% elif res.method == "drdid" %}
+    <div class="callout callout-info">Doubly-robust — adjusts for baseline imbalance via IPW + outcome regression (Sant'Anna &amp; Zhao 2020). Consistent if either the PS model or the outcome model is correctly specified.</div>
+    {% endif %}
     {% if res.get("error") %}
     <p class="warning">⚠ {{ res.error }}</p>
     {% else %}

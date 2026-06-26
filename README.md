@@ -102,7 +102,7 @@ sensitivity: true
 | Method | Key | Notes |
 |---|---|---|
 | Propensity Score Matching | `psm` | 1:1 nearest-neighbor; produces pre/post love plot and density overlap |
-| Difference-in-Differences | `did` | Two-period OLS DiD; event study plot for multi-period data |
+| Difference-in-Differences | `did` | Raw unadjusted two-period DiD; no covariate adjustment or weighting — use `drdid` when baseline imbalance is large | Two-period OLS DiD; event study plot for multi-period data |
 | Instrumental Variables | `iv` | 2SLS with Cragg-Donald weak instrument F-test |
 | Regression Discontinuity | `rdd` | Local linear with IK bandwidth; uses R `rdrobust` if available |
 | Two-Way Fixed Effects | `fixed_effects` | Entity + time FE, cluster-robust SEs; uses `linearmodels` if available |
