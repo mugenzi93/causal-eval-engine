@@ -20,6 +20,7 @@ cutoff: 50
 methods:
   - psm
   - did
+  - drdid
   - iv
   - rdd
   - fixed_effects
