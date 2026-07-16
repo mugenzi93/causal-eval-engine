@@ -27,3 +27,6 @@ methods:
   - aipw
 
 sensitivity: true
+
+agent:
+  interpret: false  # set to true to run AI interpretation after estimation

@@ -87,9 +87,17 @@ def main():
     if config.get("sensitivity", False):
         print("[5/6] Running sensitivity analysis (E-values)...")
         sensitivity_results = run_sensitivity(estimator_results)
+    else:
+        print("[5/6] Sensitivity analysis skipped (not enabled in config).")
+
+    interpretation = None
+    if config.get("agent", {}).get("interpret"):
+        print("[5.5/6] Running AI interpretation agent...")
+        from agent.interpreter import interpret_results
+        interpretation = interpret_results(estimator_results, sensitivity_results, config)
 
     print("[6/6] Building HTML report...")
-    report_path = build_report(config, diagnostics, dag_info, estimator_results, sensitivity_results)
+    report_path = build_report(config, diagnostics, dag_info, estimator_results, sensitivity_results, interpretation)
     print(f"\nDone. Report saved to: {report_path}")
 
 

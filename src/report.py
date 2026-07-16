@@ -30,6 +30,7 @@ def build_report(
     dag_info: dict,
     estimator_results: list[dict],
     sensitivity_results: list[dict],
+    interpretation: dict | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -69,6 +70,7 @@ def build_report(
         estimator_results=estimator_results,
         sensitivity_results=sensitivity_results,
         adjustment_set=dag_info.get("adjustment_set", []),
+        interpretation=interpretation,
     )
 
     out = OUTPUT_DIR / "report.html"

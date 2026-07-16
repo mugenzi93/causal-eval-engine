@@ -38,3 +38,6 @@ methods:
   - aipw
 
 sensitivity: true
+
+agent:
+  interpret: true
