@@ -44,29 +44,7 @@ subprocess.run(['/opt/anaconda3/bin/python', script, '--config', config], cwd=pr
 
 For `config/study.yaml` (the default), `python run_eval.py --config config/study.yaml` still works if run from the real CWD. For `config/study_one.yaml` (which only exists in the real directory), always use the subprocess approach above.
 
-**Copy script** — if files written by Read/Write tools are invisible in VS Code, run this to migrate them from the ghost path to the real one:
-
-```python
-import os, shutil
-
-desktop = '/Users/clementmugenzi/Desktop'
-ghost_name = b'Desktop - Clement\x27s MacBook Pro'
-real_name  = b'Desktop - Clement\xe2\x80\x99s MacBook Pro'
-
-ghost = os.path.join(desktop.encode(), ghost_name).decode()
-real  = os.path.join(desktop.encode(), real_name).decode()
-
-src = os.path.join(ghost, 'Python', 'causal-eval-engine')
-dst = os.path.join(real,  'Python', 'causal-eval-engine')
-
-for dirpath, dirnames, filenames in os.walk(src):
-    dirnames[:] = [d for d in dirnames if d not in {'.git', '__pycache__', '.pytest_cache'}]
-    rel = os.path.relpath(dirpath, src)
-    os.makedirs(os.path.join(dst, rel), exist_ok=True)
-    for f in filenames:
-        if not f.endswith('.pyc'):
-            shutil.copy2(os.path.join(dirpath, f), os.path.join(dst, rel, f))
-```
+**Note:** The ghost directory (`Desktop - Clement's MacBook Pro` with ASCII apostrophe) has been permanently deleted. The copy script is no longer needed.
 
 ---
 
@@ -109,7 +87,7 @@ pytest tests/
 | File | Dataset | Notes |
 |---|---|---|
 | `config/study.yaml` | `data/raw/sample_data.csv` | 1000-row synthetic panel data, all 6 methods enabled |
-| `config/study_one.yaml` | `data/raw/injury.csv` | Workers\u2019 compensation injury dataset, PSM + DiD + AIPW |
+| `config/study_one.yaml` | `data/raw/injury.csv` | Workers\u2019 compensation injury dataset, PSM + DiD + DR-DiD + AIPW |
 
 **Config schema:**
 
