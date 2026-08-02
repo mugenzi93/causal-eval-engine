@@ -57,6 +57,9 @@ pip install -r requirements.txt
 # Install R packages (optional — all methods have Python fallbacks)
 Rscript install.R
 
+# The AI interpretation step (agent.interpret: true) requires an API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
 # Run the full pipeline with the default config (relative path — safe from real CWD)
 python run_eval.py --config config/study.yaml
 
@@ -80,14 +83,14 @@ pytest tests/
 
 ## Architecture
 
-**Entry point:** `run_eval.py` — CLI that orchestrates the six-step pipeline. Resolves the data path relative to the project root and `os.chdir`s there so all relative output paths (`output/`, `output/figures/`) resolve correctly.
+**Entry point:** `run_eval.py` — CLI that orchestrates the six-step pipeline (plus an optional AI interpretation step, 5.5). Resolves the data path relative to the project root and `os.chdir`s there so all relative output paths (`output/`, `output/figures/`) resolve correctly.
 
 **Config files:**
 
 | File | Dataset | Notes |
 |---|---|---|
-| `config/study.yaml` | `data/raw/sample_data.csv` | 1000-row synthetic panel data, all 6 methods enabled |
-| `config/study_one.yaml` | `data/raw/injury.csv` | Workers\u2019 compensation injury dataset, PSM + DiD + DR-DiD + AIPW |
+| `config/study.yaml` | `data/raw/sample_data.csv` | 1000-row synthetic panel data; all 7 methods; AI interpretation enabled |
+| `config/study_one.yaml` | `data/raw/injury.csv` | Workers\u2019 compensation injury dataset, PSM + DiD + DR-DiD + AIPW; AI interpretation enabled |
 
 **Config schema:**
 
@@ -104,6 +107,7 @@ pytest tests/
 | `cutoff` | RDD only | Threshold value |
 | `methods` | yes | Any subset of: `psm`, `did`, `drdid`, `iv`, `rdd`, `fixed_effects`, `aipw` |
 | `sensitivity` | no | Set `true` to compute E-values |
+| `agent.interpret` | no | Set `true` to run the AI interpretation agent (step 5.5). Requires `ANTHROPIC_API_KEY` |
 
 **`src/` modules:**
 
@@ -114,6 +118,7 @@ pytest tests/
 | `dag.py` | Builds `networkx.DiGraph`; covariates → treatment, covariates → outcome, treatment → outcome. Computes minimal adjustment set. Renders PNG |
 | `estimators/` | Plugin registry — `REGISTRY` maps method name → function |
 | `sensitivity.py` | E-value computation (VanderWeele & Ding 2017 / Haneuse 2019) |
+| `agent/interpreter.py` | AI interpretation agent — optional step 5.5. Single Claude API call (`claude-sonnet-4-6`) with structured outputs; turns estimator + sensitivity results into plain-language findings. Gated on `agent.interpret` |
 | `report.py` | Renders `src/templates/report.html.j2` via Jinja2; all images base64-embedded so `output/report.html` is self-contained |
 
 ---
@@ -199,6 +204,19 @@ The report shows significance stars: `***` p < 0.001, `**` p < 0.01, `*` p < 0.0
 
 ---
 
+## AI interpretation agent
+
+`src/agent/interpreter.py` adds an optional step **5.5**, between sensitivity analysis and report generation. It is a single Claude API call (not a tool-using loop): it never touches the estimation, only translates the numeric results into plain-language findings for the report.
+
+- **Gating:** runs only when `agent.interpret: true` in the config — `run_eval.py` checks `config["agent"]["interpret"]`. Both `study.yaml` and `study_one.yaml` have it enabled.
+- **Input:** `interpret_results(estimator_results, sensitivity_results, config)` builds a JSON payload (`outcome`, `treatment`, `estimator_results`, `sensitivity_results`). `_clean_results` strips bulky/non-serializable fields via `_STRIP_KEYS` (`propensity_scores`, `matched_weights`, `rdd_plot`, `parallel_trends_plot`, `event_study_plot`).
+- **Model call:** `claude-sonnet-4-6`, `max_tokens=4096`, a methodologist system prompt, and **structured outputs** (`output_config.format` + `_RESULT_SCHEMA`) that force a fixed 7-key JSON object: `consensus`, `summary`, `actionable_insights`, `conflicts`, `robustness`, `caveats`, `conclusion`.
+- **Parsing:** `_parse_json_response` extracts the JSON (tolerates ```` ```json ```` fences, falls back to slicing the outermost `{...}`) before `json.loads`.
+- **Output:** the returned dict is passed to `build_report`, which renders it in the green "AI interpretation" section of `report.html`.
+- **Requirements & failure handling:** needs the `anthropic` package (in `requirements.txt`) and `ANTHROPIC_API_KEY` set. The call is wrapped in try/except — a missing/invalid key or any error prints `WARNING: ... skipping` and returns `None`, and the pipeline still finishes and builds the report without the interpretation section.
+
+---
+
 ## Key constraints
 
 - The DAG structure is fixed: covariates → treatment, covariates → outcome, treatment → outcome. Not user-configurable from YAML
@@ -206,6 +224,7 @@ The report shows significance stars: `***` p < 0.001, `**` p < 0.01, `*` p < 0.0
 - All output paths in `src/` modules must be anchored to `Path(__file__).resolve().parent...` — never `Path("output/...")` relative to CWD
 - Data: `.parquet` and `.csv` supported; format detected by suffix in `ingestion.load_data`
 - `sensitivity.py` looks for `"ate"` first, then `"late"` — RDD results use `"tau"` and are skipped unless the key is renamed
+- Python bytecode is ignored via `.gitignore` (`__pycache__/`, `*.pyc`); `output/` (report + figures) is intentionally tracked and versioned
 
 ---
 

@@ -24,6 +24,8 @@ The intended users are researchers and analysts who need to evaluate treatment e
 pip install -r requirements.txt
 Rscript install.R          # install R packages (optional — Python fallbacks exist)
 
+export ANTHROPIC_API_KEY=sk-ant-...   # only needed when agent.interpret is true
+
 python run_eval.py --config config/study.yaml
 # → output/report.html
 ```
@@ -42,6 +44,8 @@ causal-eval-engine/
 │   ├── dag.py                  # Causal DAG construction + adjustment set
 │   ├── sensitivity.py          # E-values for unmeasured confounding
 │   ├── report.py               # Self-contained HTML report builder
+│   ├── agent/
+│   │   └── interpreter.py      # AI interpretation agent (optional step 5.5)
 │   ├── templates/
 │   │   └── report.html.j2      # Jinja2 HTML template
 │   └── estimators/
@@ -59,6 +63,7 @@ causal-eval-engine/
 │   └── figures/                # All diagnostic and method figures
 ├── tests/
 │   └── test_ingestion.py
+├── .gitignore
 ├── requirements.txt
 ├── install.R
 └── run_eval.py                 # CLI entry point
@@ -93,6 +98,9 @@ methods:
   - aipw
 
 sensitivity: true
+
+agent:
+  interpret: true            # run the AI interpretation agent (needs ANTHROPIC_API_KEY)
 ```
 
 ---
@@ -122,12 +130,13 @@ The generated `output/report.html` is a single self-contained file with all figu
 - **ECDF plots** — empirical CDFs for each covariate
 - **Causal effect estimates** — ATE/LATE with 95% CIs and p-values for each selected method
 - **Sensitivity analysis** — E-values for unmeasured confounding per estimator
+- **AI interpretation** *(optional)* — plain-language findings (consensus, actionable insights, conflicts, robustness, caveats, conclusion) written by Claude when `agent.interpret` is enabled
 
 ---
 
 ## Dependencies
 
-**Python:** `pandas`, `numpy`, `scipy`, `scikit-learn`, `networkx`, `pyyaml`, `jinja2`, `matplotlib`, `seaborn`, `tableone`, `linearmodels` (optional), `rpy2` (optional)
+**Python:** `pandas`, `numpy`, `scipy`, `scikit-learn`, `networkx`, `pyyaml`, `jinja2`, `matplotlib`, `seaborn`, `tableone`, `anthropic` (AI interpretation agent), `linearmodels` (optional), `rpy2` (optional)
 
 **R (optional):** `MatchIt`, `WeightIt`, `rdrobust`, `fixest`, `ivreg`, `did`, `cobalt`, `tableone`
 

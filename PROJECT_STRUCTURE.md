@@ -3,6 +3,7 @@
 ```
 causal-eval-engine/
 ├── run_eval.py
+├── .gitignore
 ├── requirements.txt
 ├── install.R
 ├── CLAUDE.md
@@ -21,6 +22,8 @@ causal-eval-engine/
 │   ├── dag.py
 │   ├── sensitivity.py
 │   ├── report.py
+│   ├── agent/
+│   │   └── interpreter.py
 │   ├── estimators/
 │   │   ├── __init__.py
 │   │   ├── psm.py
@@ -50,6 +53,7 @@ causal-eval-engine/
 | `run_eval.py` | Single entry point — orchestrates the full pipeline from data loading to report generation |
 | `requirements.txt` | Python dependencies |
 | `install.R` | R dependencies (optional — every method has a Python fallback) |
+| `.gitignore` | Ignores Python bytecode (`__pycache__/`, `*.pyc`) and common cruft |
 | `CLAUDE.md` | Instructions for Claude Code; documents architecture, constraints, and the Unicode path workaround |
 | `README.md` | Project overview and quick-start |
 | `USER_GUIDE.md` | Full end-user walkthrough — data prep, method selection, assumptions, report interpretation |
@@ -62,8 +66,8 @@ Study definitions. Each file describes one study: which dataset to use, which co
 
 | File | Dataset | Notes |
 |---|---|---|
-| `study.yaml` | `data/raw/sample_data.csv` | Synthetic 1000-row panel data; all methods enabled |
-| `study_one.yaml` | `data/raw/injury.csv` | Workers' compensation injury study; PSM + DiD + DR-DiD + AIPW |
+| `study.yaml` | `data/raw/sample_data.csv` | Synthetic 1000-row panel data; all methods enabled; AI interpretation enabled |
+| `study_one.yaml` | `data/raw/injury.csv` | Workers' compensation injury study; PSM + DiD + DR-DiD + AIPW; AI interpretation enabled |
 
 ---
 
@@ -88,6 +92,7 @@ All pipeline logic. Imported by `run_eval.py` via `sys.path`.
 | `diagnostics.py` | Table 1, love plot (multi-scheme: unadjusted, IPW, overlap, matching weights), density plots, ECDF plots |
 | `dag.py` | Builds and renders the causal DAG; computes the minimal adjustment set |
 | `sensitivity.py` | E-value computation for robustness to unmeasured confounding |
+| `agent/interpreter.py` | AI interpretation agent (optional step 5.5) — single Claude API call (`claude-sonnet-4-6`) with structured outputs; turns estimator + sensitivity results into plain-language findings. Gated on `agent.interpret` |
 | `report.py` | Renders the final self-contained HTML report via Jinja2 |
 | `estimators/` | One file per causal method; `__init__.py` holds the registry mapping method names to functions |
 | `templates/report.html.j2` | HTML template the report is rendered from |

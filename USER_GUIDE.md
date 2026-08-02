@@ -28,6 +28,14 @@ Rscript install.R
 
 This is optional. Every method has a pure Python fallback, so you can skip this step if R is not available.
 
+The report also includes an optional **AI interpretation** section (enabled by `agent.interpret: true` in the config). It calls the Claude API, so it needs the `anthropic` package (installed above) plus an API key in your environment:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+If the key is missing or invalid, the pipeline prints a warning and still produces the report — just without the interpretation section.
+
 ---
 
 ### Step 2 — Prepare your data
@@ -83,6 +91,9 @@ methods:
   - aipw
 
 sensitivity: true
+
+agent:
+  interpret: true            # run the AI interpretation agent (needs ANTHROPIC_API_KEY)
 ```
 
 > **Example study (`config/study_one.yaml`):** The injury dataset (`data/raw/injury.csv`) is drawn from a workers’ compensation study examining the effect of higher earnings (`highearn`) on injury duration (`ldurat`). The DiD methodology used for this dataset is explained in detail at:
@@ -154,6 +165,8 @@ Work through the report sections in order:
 6. **Causal effect estimates** — review the ATE (or LATE for IV/RDD) from each method. Consistent estimates across methods strengthen the causal interpretation. Large disagreements suggest unmet assumptions in one or more methods.
 
 7. **Sensitivity analysis (E-values)** — the E-value is the minimum strength of association an unmeasured confounder would need (with both treatment and outcome) to fully explain away the observed effect. A larger E-value means greater robustness. An E-value close to 1.0 means a very weak confounder could nullify the result.
+
+8. **AI interpretation** *(optional)* — if `agent.interpret` is enabled, a plain-language summary written by Claude: whether the methods agree (consensus), actionable insights, any conflicts between estimates and their likely methodological causes, an E-value robustness read, caveats, and a one-line conclusion. Treat it as a convenience layer over the numbers above — always check it against the estimates and diagnostics yourself.
 
 ---
 
