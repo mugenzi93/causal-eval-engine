@@ -39,12 +39,80 @@ Rules you must follow:
 7. Return ONLY valid JSON. No markdown. No text outside the JSON object.
 """
 
+# JSON schema mirroring the keys the SYSTEM_PROMPT asks for. Passed via
+# output_config.format so the API guarantees a valid, parseable JSON object.
+_RESULT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "consensus": {"type": "boolean"},
+        "summary": {"type": "string"},
+        "actionable_insights": {"type": "array", "items": {"type": "string"}},
+        "conflicts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "methods": {"type": "array", "items": {"type": "string"}},
+                    "description": {"type": "string"},
+                    "likely_explanation": {"type": "string"},
+                },
+                "required": ["methods", "description", "likely_explanation"],
+                "additionalProperties": False,
+            },
+        },
+        "robustness": {"type": "string"},
+        "caveats": {"type": "array", "items": {"type": "string"}},
+        "conclusion": {"type": "string"},
+    },
+    "required": [
+        "consensus",
+        "summary",
+        "actionable_insights",
+        "conflicts",
+        "robustness",
+        "caveats",
+        "conclusion",
+    ],
+    "additionalProperties": False,
+}
+
 
 def _clean_results(results: list[dict]) -> list[dict]:
     cleaned = []
     for r in results:
         cleaned.append({k: v for k, v in r.items() if k not in _STRIP_KEYS})
     return cleaned
+
+
+def _parse_json_response(response) -> dict:
+    """Extract and parse the JSON object from a model response.
+
+    output_config.format guarantees the first text block is valid JSON, but we
+    stay defensive: pull the text out, strip any ```json fences, and fall back
+    to slicing from the first { to the last } before json.loads.
+    """
+    text = next(
+        (b.text for b in response.content if getattr(b, "type", None) == "text"),
+        "",
+    ).strip()
+    if not text:
+        raise ValueError("empty response from interpretation model")
+
+    # Strip a leading/trailing markdown code fence if the model added one.
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else text
+        if text.endswith("```"):
+            text = text[: -len("```")]
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Last resort: isolate the outermost JSON object and retry.
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise
+        return json.loads(text[start : end + 1])
 
 
 def interpret_results(
@@ -62,11 +130,14 @@ def interpret_results(
         }
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1500,
+            max_tokens=4096,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": json.dumps(payload, default=str)}],
+            output_config={
+                "format": {"type": "json_schema", "schema": _RESULT_SCHEMA}
+            },
         )
-        return json.loads(response.content[0].text)
+        return _parse_json_response(response)
     except anthropic.AuthenticationError:
         print("      WARNING: ANTHROPIC_API_KEY missing or invalid — skipping AI interpretation.")
         return None
