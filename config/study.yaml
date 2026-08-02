@@ -29,4 +29,4 @@ methods:
 sensitivity: true
 
 agent:
-  interpret: false  # set to true to run AI interpretation after estimation
+  interpret: true
