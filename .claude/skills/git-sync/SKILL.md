@@ -1,10 +1,14 @@
 ---
-description: Push or pull changes for the causal-eval-engine repo
+name: git-sync
+description: Push or pull changes for the causal-eval-engine repo. Use when the user asks to sync, push, commit and push, pull, fetch, or get the latest for this repository.
+when_to_use: Trigger on requests like "push my changes", "sync the repo", "commit and push", "pull the latest", or "get remote updates" for causal-eval-engine.
 model: claude-haiku-4-5-20251001
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git fetch:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git pull:*), Bash(git push:*)
 ---
 
 You are helping the user sync the causal-eval-engine repository (git@github.com:mugenzi93/causal-eval-engine.git) with the remote.
+
+This skill can be invoked automatically from context. Because pushing is an outward, hard-to-reverse action, **always confirm the user actually intends to push before pushing** — do not push just because changes look ready.
 
 First, run `git status` to understand the current state of the repo.
 
