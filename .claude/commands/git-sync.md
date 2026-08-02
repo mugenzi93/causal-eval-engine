@@ -1,5 +1,6 @@
 ---
 description: Push or pull changes for the causal-eval-engine repo
+model: claude-haiku-4-5-20251001
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git fetch:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git pull:*), Bash(git push:*)
 ---
 
